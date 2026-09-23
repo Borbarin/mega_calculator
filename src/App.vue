@@ -1,12 +1,13 @@
 <script setup>
-import {compile, computed, ref} from 'vue'
+import { computed, ref } from 'vue'
 import CalcButton from './components/CalcButton.vue'
 
-// Значение на экране
 const display = ref('0')
 const expression = ref('')
-const operatorFlag = ref(false)
-const operation = ref('')
+const previousValue = ref(null)
+const operation = ref(null)
+const waitingForNewValue = ref(false)
+
 const buttons = [
   {label: 'M+', variant: 'function'},
   {label: 'M-', variant: 'function'},
@@ -38,78 +39,191 @@ const buttons = [
   {label: '=', variant: 'operator'}
 ]
 
-function calculate(){
-  let a = parseFloat(expression.value.slice(0, -1))
-  let b = parseFloat(display.value)
-  switch (operation.value){
+function updateExpression() {
+  if (previousValue.value !== null && operation.value !== null) {
+    const prevStr = String(previousValue.value).replace('.', ',').replace('-', '−')
+    expression.value = `${prevStr} ${operation.value}`
+  } else {
+    expression.value = ''
+  }
+}
+
+function calculate() {
+  if (previousValue.value === null || operation.value === null) return
+
+  const currentStr = display.value.replace(',', '.').replace('−', '-')
+  const current = parseFloat(currentStr)
+  const safeCurrent = isNaN(current) ? 0 : current
+  let result = 0
+
+  switch (operation.value) {
     case '+':
-      expression.value = String(a+b)
+      result = previousValue.value + safeCurrent
       break
     case '−':
-      expression.value = String(a-b)
-      break
-    case '÷':
-      expression.value = String(a/b)
+      result = previousValue.value - safeCurrent
       break
     case '×':
-      expression.value = String(a*b)
+      result = previousValue.value * safeCurrent
       break
-    default:
-      expression.value = 'Error'
-      break
-  }
-
-
-}
-function funcPress(label){
-  switch (label){
-    case "M+":
-      break
-    case "M-":
-      break
-    case "MR":
-      break
-    case "MS":
-      break
-    case "AC":
-      display.value = "0"
-      expression.value = ''
-      operatorFlag.value = false
-      operation.value = ''
-      break
-    case "MC":
-      break
-    case "%":
+    case '÷':
+      result = safeCurrent === 0 ? 'Error' : previousValue.value / safeCurrent
       break
   }
+
+  if (result === 'Error') {
+    display.value = 'Error'
+    previousValue.value = null
+    operation.value = null
+    waitingForNewValue.value = true
+    expression.value = ''
+    return
+  }
+
+  const cleanResult = parseFloat(result.toPrecision(15))
+  display.value = String(cleanResult).replace('.', ',').replace('-', '−')
+  previousValue.value = cleanResult
 }
 
-function operatorPress(label){
-  switch (label){
-    case "=":
+function onNumberPress(label) {
+  if (waitingForNewValue.value) {
+    if (display.value === '−' || display.value === '-') {
+      display.value = '−' + label
+    } else {
+      display.value = label
+    }
+    waitingForNewValue.value = false
+  } else {
+    if (display.value === '0') {
+      display.value = label === ',' ? '0,' : label
+    } else if (display.value === '−' || display.value === '-') {
+      display.value = label === ',' ? '−0,' : '−' + label
+    } else {
+      display.value += label
+    }
+  }
+}
+
+function onOperatorPress(label) {
+  if (display.value === 'Error') return
+
+  if (label === '=') {
+    if (operation.value !== null && previousValue.value !== null) {
       calculate()
-      operatorFlag.value = false
-      display.value = expression.value
-      expression.value = ''
-      break
-    default:
-      if(operatorFlag.value){
-        calculate()
-        operation.value = label
-        expression.value = expression.value + operation.value
-        display.value = '0'
-      }
-      else{
-        expression.value = display.value
-        operation.value = label
-        display.value = '0'
-      }
-      operatorFlag.value = true
-      break
+    }
+    operation.value = null
+    previousValue.value = null
+    waitingForNewValue.value = true
+    expression.value = ''
+    return
   }
 
+  if (waitingForNewValue.value) {
+    if (label === '−') {
+      display.value = '−'
+      return
+    } else {
+      operation.value = label
+      updateExpression()
+      return
+    }
+  }
+
+  const currentStr = display.value.replace(',', '.').replace('−', '-')
+  const currentValue = parseFloat(currentStr)
+  const safeCurrentValue = isNaN(currentValue) ? 0 : currentValue
+
+  if (previousValue.value === null) {
+    previousValue.value = safeCurrentValue
+  } else {
+    calculate()
+  }
+
+  operation.value = label
+  waitingForNewValue.value = true
+  updateExpression()
 }
 
+function onFunctionPress(label) {
+  switch (label) {
+    case 'AC':
+      display.value = '0'
+      expression.value = ''
+      previousValue.value = null
+      operation.value = null
+      waitingForNewValue.value = false
+      break
+
+    case '%':
+      if (display.value === 'Error') return;
+
+      const currentStr = display.value.replace(',', '.').replace('−', '-');
+      const current = parseFloat(currentStr);
+      if (isNaN(current)) return;
+
+      if (previousValue.value !== null && operation.value !== null) {
+        let result = 0;
+
+
+        if (operation.value === '×' || operation.value === '÷') {
+          result = previousValue.value * (current / 100);
+        }
+
+        else if (operation.value === '+') {
+          result = previousValue.value + (previousValue.value * (current / 100));
+        }
+
+        else if (operation.value === '−') {
+          result = previousValue.value - (previousValue.value * (current / 100));
+        }
+
+        const cleanResult = parseFloat(result.toPrecision(15));
+        display.value = String(cleanResult).replace('.', ',').replace('-', '−');
+
+
+        previousValue.value = cleanResult;
+        operation.value = null;
+        expression.value = '';
+        waitingForNewValue.value = true;
+      } else {
+
+        const result = current / 100;
+        const cleanResult = parseFloat(result.toPrecision(15));
+        display.value = String(cleanResult).replace('.', ',').replace('-', '−');
+        waitingForNewValue.value = true;
+      }
+      break;
+
+    case 'MC':
+    case 'M+':
+    case 'M-':
+    case 'MR':
+    case 'MS':
+
+      break;
+  }
+}
+
+function onButtonPress(label, variant) {
+  if (display.value === 'Error') {
+    if (label === 'AC') {
+      onFunctionPress('AC')
+    }
+    return
+  }
+
+  switch (variant) {
+    case "number":
+      onNumberPress(label)
+      break
+    case "function":
+      onFunctionPress(label)
+      break
+    case "operator":
+      onOperatorPress(label)
+      break
+  }
+}
 
 const displayFontSize = computed(() => {
   const len = display.value.length
@@ -119,29 +233,6 @@ const displayFontSize = computed(() => {
   if (len <= 15) return '2.5rem'
   return '2.2rem'
 })
-
-function onButtonPress(label, variant) {
-  switch (variant){
-    case "number":
-      if (display.value.length<15) {
-        if (display.value === "0") {
-          display.value = label
-        } else {
-          display.value += label
-        }
-      }
-      break
-    case "function":
-      funcPress(label)
-      break
-    case "operator":
-      if (display.value.length<16){
-        display.value += label
-      }
-      operatorPress(label)
-      break
-  }
-}
 </script>
 
 <template>
