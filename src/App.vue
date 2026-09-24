@@ -7,7 +7,6 @@ const expression = ref('')
 const previousValue = ref(null)
 const operation = ref(null)
 const waitingForNewValue = ref(false)
-
 const buttons = [
   {label: 'M+', variant: 'function'},
   {label: 'M-', variant: 'function'},
@@ -195,11 +194,23 @@ function onFunctionPress(label) {
       break;
 
     case 'MC':
+      localStorage.clear('memory')
+      break;
     case 'M+':
+      if(localStorage.getItem !== ''){
+         localStorage.setItem('memory', String(parseFloat(localStorage.getItem('memory')) + parseFloat(display.value)))
+      }
+      break;
     case 'M-':
+      if(localStorage.getItem !== ''){
+        localStorage.setItem('memory', String(parseFloat(localStorage.getItem('memory')) - parseFloat(display.value)))
+      }
+      break;
     case 'MR':
+      display.value = localStorage.getItem('memory')
+      break;
     case 'MS':
-
+      localStorage.setItem('memory', display.value)
       break;
   }
 }
